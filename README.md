@@ -1,4 +1,12 @@
-# EditOS backend
+# EditOS
+
+**One repo, both halves of the project:**
+- `/frontend/index.html` — the UI, deployed to Vercel: https://editos-emmasif789-9445s-projects.vercel.app
+- everything else (`/app`, `Dockerfile`, `docker-compose.yml`) — the real backend (FFmpeg + faster-whisper + OpenCV + Ollama), runs locally via Docker
+
+The frontend automatically detects and calls the backend when it's running on `localhost:8000` (badge in the top-right shows "Backend connected" vs "Browser-only mode"). No backend needed for the site to work — it falls back to doing real analysis in-browser — but the backend gives frame-accurate cuts, real mp4 export, and local AI reasoning via Ollama.
+
+## Backend
 
 Real pipeline: FFmpeg (cut/silence/loudness/captions) + faster-whisper (transcription) + OpenCV (reference pacing) + Ollama (local reasoning).
 
