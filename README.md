@@ -8,11 +8,21 @@ Real pipeline: FFmpeg (cut/silence/loudness/captions) + faster-whisper (transcri
 
 Both are set as the defaults below — you don't need to change anything for a modest laptop.
 
-## Run it
+## First-time setup
 ```
 docker compose up --build
 docker exec -it editos-backend-ollama-1 ollama pull llama3.2:1b
 ```
+
+## Every time after that
+Containers are set to `restart: unless-stopped`, so once built they come back automatically whenever Docker Desktop is running — you don't need to run any commands most of the time.
+
+If you do need to start/stop manually (e.g. after fully quitting Docker Desktop), just double-click:
+- **start.bat** — starts both containers in the background, no terminal window needs to stay open
+- **stop.bat** — stops them
+
+Or from the command line: `docker compose up -d` / `docker compose down`.
+
 API at http://localhost:8000 (docs at /docs).
 
 ## Pipeline
