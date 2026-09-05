@@ -1,4 +1,4 @@
-import os, uuid, shutil
+import os, uuid, shutil, time
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,7 +14,30 @@ DATA_DIR = os.environ.get("DATA_DIR", "/data")
 os.makedirs(DATA_DIR, exist_ok=True)
 app.mount("/files", StaticFiles(directory=DATA_DIR), name="files")
 
+# How many completed jobs to keep before deleting the oldest (files + memory).
+# No limit on how many edits you can generate — this just stops old ones from
+# piling up on disk/RAM forever. Override with MAX_KEPT_JOBS env var.
+MAX_KEPT_JOBS = int(os.environ.get("MAX_KEPT_JOBS", "20"))
+
 JOBS: dict[str, dict] = {}  # in-memory job store (swap for redis/db in real prod)
+JOB_ORDER: list[str] = []  # tracks insertion order so we know which to evict first
+
+
+def _evict_old_jobs():
+    while len(JOB_ORDER) > MAX_KEPT_JOBS:
+        old_id = JOB_ORDER.pop(0)
+        old_job = JOBS.pop(old_id, None)
+        if old_job:
+            try:
+                shutil.rmtree(old_job["dir"], ignore_errors=True)
+            except Exception:
+                pass
+
+
+def register_job(job_id: str, data: dict):
+    JOBS[job_id] = data
+    JOB_ORDER.append(job_id)
+    _evict_old_jobs()
 
 
 def job_dir(job_id: str) -> str:
@@ -26,8 +49,24 @@ def job_dir(job_id: str) -> str:
 def get_job(job_id: str) -> dict:
     job = JOBS.get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Unknown job_id '{job_id}' — did you call /upload first, or restart the server since?")
+        raise HTTPException(status_code=404, detail=f"Unknown job_id '{job_id}' — did you call /upload first, or was it evicted (see /jobs), or did the server restart?")
     return job
+
+
+@app.delete("/jobs")
+def clear_all_jobs():
+    """Manual full cleanup — wipes every stored job's files and frees the memory."""
+    count = len(JOBS)
+    for jid in list(JOBS.keys()):
+        shutil.rmtree(JOBS[jid]["dir"], ignore_errors=True)
+    JOBS.clear()
+    JOB_ORDER.clear()
+    return {"cleared": count}
+
+
+@app.get("/jobs")
+def list_jobs():
+    return {"count": len(JOBS), "max_kept": MAX_KEPT_JOBS, "job_ids": JOB_ORDER}
 
 
 @app.post("/upload")
@@ -47,7 +86,7 @@ async def upload(raw: list[UploadFile] = File(...), reference: UploadFile | None
         with open(ref_path, "wb") as out:
             shutil.copyfileobj(reference.file, out)
 
-    JOBS[job_id] = {"raw_paths": raw_paths, "ref_path": ref_path, "dir": d}
+    register_job(job_id, {"raw_paths": raw_paths, "ref_path": ref_path, "dir": d})
     return {"job_id": job_id, "raw_files": len(raw_paths), "has_reference": ref_path is not None}
 
 
