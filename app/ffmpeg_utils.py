@@ -1,18 +1,27 @@
 import subprocess, json, re, os
 
+try:
+    import imageio_ffmpeg
+    FFMPEG_BIN = imageio_ffmpeg.get_ffmpeg_exe()
+except Exception:
+    FFMPEG_BIN = "ffmpeg"  # falls back to a system install if the pip package isn't present
+
 def probe(path: str) -> dict:
-    out = subprocess.run(
-        ["ffprobe","-v","error","-print_format","json","-show_format","-show_streams", path],
-        capture_output=True, text=True, check=True
-    ).stdout
-    data = json.loads(out)
-    duration = float(data["format"].get("duration", 0))
-    has_audio = any(s["codec_type"]=="audio" for s in data["streams"])
-    return {"duration": duration, "has_audio": has_audio, "raw": data}
+    """Duration/audio-track probing without ffprobe (not bundled by imageio-ffmpeg) —
+    parses ffmpeg's own '-i' stderr output instead, which every ffmpeg build prints."""
+    proc = subprocess.run([FFMPEG_BIN, "-i", path], capture_output=True, text=True)
+    log = proc.stderr
+    m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", log)
+    duration = 0.0
+    if m:
+        h, mnt, s = m.groups()
+        duration = int(h) * 3600 + int(mnt) * 60 + float(s)
+    has_audio = bool(re.search(r"Stream #\d+:\d+.*Audio:", log))
+    return {"duration": duration, "has_audio": has_audio, "raw_probe_log": log}
 
 def detect_silence(path: str, noise_db: str = "-30dB", min_dur: float = 0.55) -> list[dict]:
     """Real silence detection via ffmpeg's silencedetect filter."""
-    cmd = ["ffmpeg","-i", path, "-af", f"silencedetect=noise={noise_db}:d={min_dur}", "-f","null","-"]
+    cmd = [FFMPEG_BIN,"-i", path, "-af", f"silencedetect=noise={noise_db}:d={min_dur}", "-f","null","-"]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     log = proc.stderr
     starts = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", log)]
@@ -24,7 +33,7 @@ def detect_silence(path: str, noise_db: str = "-30dB", min_dur: float = 0.55) ->
 
 def measure_loudness(path: str) -> dict:
     """Real integrated loudness via ffmpeg loudnorm first pass (EBU R128)."""
-    cmd = ["ffmpeg","-i", path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json", "-f","null","-"]
+    cmd = [FFMPEG_BIN,"-i", path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json", "-f","null","-"]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", proc.stderr, re.S)
     if not m:
@@ -60,7 +69,7 @@ def cut_and_concat(path: str, segments: list[dict], gain_db: float, out_path: st
     for i, seg in enumerate(segments):
         part = os.path.join(tmp_dir, f"part_{i}.mp4")
         subprocess.run([
-            "ffmpeg","-y","-ss", str(seg["start"]), "-to", str(seg["end"]), "-i", path,
+            FFMPEG_BIN,"-y","-ss", str(seg["start"]), "-to", str(seg["end"]), "-i", path,
             "-af", f"volume={gain_db}dB",
             "-c:v","libx264","-preset","veryfast","-crf","20","-c:a","aac", part
         ], check=True, capture_output=True)
@@ -72,7 +81,7 @@ def cut_and_concat(path: str, segments: list[dict], gain_db: float, out_path: st
             f.write(f"file '{p}'\n")
 
     subprocess.run([
-        "ffmpeg","-y","-f","concat","-safe","0","-i", list_file,
+        FFMPEG_BIN,"-y","-f","concat","-safe","0","-i", list_file,
         "-c","copy", out_path
     ], check=True, capture_output=True)
 
@@ -84,7 +93,7 @@ def cut_and_concat(path: str, segments: list[dict], gain_db: float, out_path: st
 def burn_captions(in_path: str, srt_path: str, out_path: str):
     """Real caption burn-in via ffmpeg subtitles filter (needs an .srt from whisper)."""
     subprocess.run([
-        "ffmpeg","-y","-i", in_path,
+        FFMPEG_BIN,"-y","-i", in_path,
         "-vf", f"subtitles={srt_path}:force_style='FontName=Arial,FontSize=20,PrimaryColour=&H3DFFC8&,BorderStyle=3,Outline=1,Alignment=2'",
         "-c:a","copy", out_path
     ], check=True, capture_output=True)
