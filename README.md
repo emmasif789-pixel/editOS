@@ -13,27 +13,21 @@ Real pipeline: FFmpeg via `imageio-ffmpeg` (cut/silence/loudness/captions — no
 **Tuned for low-spec CPUs (e.g. older i5, no GPU, 8GB RAM):**
 - Whisper model: `tiny` (~75MB, works on 4GB RAM / 2 cores) — lazy-loaded, so it costs nothing in RAM until a caption request actually happens
 
-## Setup
+## Setup — no Docker needed
 
-1. Copy `.env.example` to `.env` and put your real Gemini API key in it:
-   ```
-   cp .env.example .env
-   ```
-2. Start it:
-   ```
-   docker compose up --build
-   ```
+Just Python. Double-click, in order:
 
-## Every time after that
-The container is set to `restart: unless-stopped`, so once built it comes back automatically whenever Docker Desktop is running — you don't need to run any commands most of the time.
+1. **`setup.bat`** — one-time. Installs Python packages into a local `venv` folder, and opens Notepad for you to paste your real Gemini API key into `.env`.
+2. **`start.bat`** — every time you want to use it. Starts the backend at `http://localhost:8000`. Leave that window open; press Ctrl+C in it to stop.
 
-If you do need to start/stop manually, just double-click:
-- **start.bat** — starts it in the background, no terminal window needs to stay open
-- **stop.bat** — stops it
+That's it — no Docker Desktop, no containers, no builds. FFmpeg comes bundled inside a pip package (`imageio-ffmpeg`), so there's nothing extra to install at the OS level either.
 
-Or from the command line: `docker compose up -d` / `docker compose down`.
-
-API at http://localhost:8000 (docs at /docs).
+## Optional: Docker instead
+If you'd rather use Docker (e.g. for closer parity with a Docker-based host), it still works:
+```
+cp .env.example .env   # then edit .env with your real key
+docker compose up --build
+```
 
 ## Hosting on Render (no Docker required there)
 This backend also runs as a plain Python web service (Render's free tier doesn't support Docker without a paid plan in some workspace types) — FFmpeg is bundled via the `imageio-ffmpeg` pip package, no system install needed:

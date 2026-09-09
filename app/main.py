@@ -1,4 +1,7 @@
 import os, uuid, shutil, time
+from dotenv import load_dotenv
+load_dotenv()  # reads .env into os.environ, must run before gemini_utils reads GEMINI_API_KEY below
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

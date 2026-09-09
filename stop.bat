@@ -1,6 +1,4 @@
 @echo off
-echo Stopping EditOS backend...
-cd /d "%~dp0"
-docker compose down
-echo Done.
+echo EditOS now runs directly in the start.bat window (no Docker, no background service).
+echo To stop it: go to that window and press Ctrl+C.
 pause

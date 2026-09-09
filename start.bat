@@ -1,9 +1,13 @@
 @echo off
-echo Starting EditOS backend...
 cd /d "%~dp0"
-docker compose up -d
-echo.
-echo Done. Backend running in the background at http://localhost:8000
-echo You can close this window - the container keeps running.
-echo Make sure GEMINI_API_KEY is set in your .env file (see .env.example).
+if not exist venv (
+  echo No virtual environment found - run setup.bat first.
+  pause
+  exit /b 1
+)
+call venv\Scripts\activate.bat
+echo Starting EditOS backend at http://localhost:8000
+echo Leave this window open. Press Ctrl+C here to stop it.
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 pause
+
