@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ffmpeg_utils, whisper_utils, vision_utils, ollama_utils
+from . import ffmpeg_utils, whisper_utils, vision_utils, gemini_utils
 
 app = FastAPI(title="EditOS Backend")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -145,15 +145,14 @@ async def plan(job_id: str = Form(...)):
         "reference_measured": job["ref_stats"],
     }
     try:
-        reasoning = await ollama_utils.generate_plan_reasoning(job["intent"], facts)
+        reasoning = await gemini_utils.generate_plan_reasoning(job["intent"], facts)
     except Exception as e:
         return JSONResponse(
             status_code=502,
             content={
-                "error": "Couldn't reach Ollama for plan reasoning.",
+                "error": "Couldn't get plan reasoning from Gemini.",
                 "detail": str(e),
-                "hint": "Make sure the ollama container is running and you've pulled the model: "
-                        "docker exec -it <ollama-container> ollama pull llama3.2:1b",
+                "hint": "Make sure GEMINI_API_KEY is set as an environment variable on this server.",
                 "facts": facts,
             },
         )
