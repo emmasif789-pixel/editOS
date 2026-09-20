@@ -40,6 +40,11 @@ This backend also runs as a plain Python web service (Render's free tier doesn't
 1. `POST /upload` — raw clips + optional reference → job_id
 2. `POST /analyze` — real ffmpeg silencedetect/loudnorm on raw, real OpenCV cut-rhythm on reference
 3. `POST /plan` — Gemini explains the plan from the measured facts (no invented numbers)
-4. `POST /render` — real ffmpeg cut+concat+normalize → real mp4; optional Whisper transcript + burned captions
+4. `POST /render` — the actual edit. Not just trim-and-normalize:
+   - **Pacing-matched re-cuts**: long unbroken takes get split to match your reference's real measured shot length (or an intent-based default if no reference) — `match_pacing` (default on)
+   - **Real crossfade transitions** between every cut via ffmpeg's `xfade`/`acrossfade` — `transition_duration` in seconds (default 0.3, set 0 for hard cuts)
+   - **Speed control** — `speed` multiplier (default 1.0), e.g. 1.15 for a punchier feel
+   - **Color grade** — mild contrast/saturation boost — `color_grade` (default on)
+   - Real ffmpeg cut+concat+normalize → real mp4; optional Whisper transcript + burned captions
 5. `GET /jobs` / `DELETE /jobs` — see or wipe stored jobs. Jobs auto-evict (oldest first) past `MAX_KEPT_JOBS` (default 20) so disk/memory never grow unbounded.
 

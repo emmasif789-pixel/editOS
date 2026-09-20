@@ -1,4 +1,4 @@
-import os, uuid, shutil, time
+import os, uuid, shutil, time, subprocess
 from dotenv import load_dotenv
 load_dotenv()  # reads .env into os.environ, must run before gemini_utils reads GEMINI_API_KEY below
 
@@ -167,6 +167,16 @@ class RenderRequest(BaseModel):
     job_id: str
     burn_captions: bool = False
     gain_db: float = 0.0
+    transition_duration: float = 0.3   # real crossfade between cuts; 0 = hard cuts
+    speed: float = 1.0                 # 1.0 = normal, e.g. 1.15 = 15% faster/punchier
+    color_grade: bool = True           # mild contrast/saturation boost
+    match_pacing: bool = True          # re-cut long takes to match reference (or intent default) rhythm
+
+
+INTENT_DEFAULT_SHOT_LEN = {
+    "product": 4.5, "tiktok": 2.0, "youtube": 6.0, "hackathon": 4.0,
+    "educational": 6.5, "ad": 3.0, "personal": 5.5, "custom": 5.0,
+}
 
 
 @app.post("/render")
@@ -175,10 +185,23 @@ async def render(req: RenderRequest):
     d = job["dir"]
     out_parts = []
 
+    ref_stats = job.get("ref_stats")
+    if ref_stats and ref_stats.get("avg_shot_len"):
+        target_shot_len = ref_stats["avg_shot_len"]
+    else:
+        target_shot_len = INTENT_DEFAULT_SHOT_LEN.get(job.get("intent"), 5.0)
+
     for i, f in enumerate(job["files"]):
         segs = ffmpeg_utils.compute_keep_segments(f["duration"], f["silences"])
+        if req.match_pacing:
+            segs = ffmpeg_utils.split_to_target_length(segs, target_shot_len)
         out_path = os.path.join(d, f"cut_{i}.mp4")
-        ffmpeg_utils.cut_and_concat(f["path"], segs, req.gain_db, out_path)
+        ffmpeg_utils.cut_and_concat(
+            f["path"], segs, req.gain_db, out_path,
+            transition_duration=req.transition_duration,
+            speed=req.speed,
+            color_grade=req.color_grade,
+        )
         out_parts.append(out_path)
 
     final_path = out_parts[0] if len(out_parts) == 1 else os.path.join(d, "final.mp4")
@@ -187,8 +210,8 @@ async def render(req: RenderRequest):
         with open(list_file, "w") as fh:
             for p in out_parts:
                 fh.write(f"file '{p}'\n")
-        import subprocess
-        subprocess.run(["ffmpeg","-y","-f","concat","-safe","0","-i", list_file, "-c","copy", final_path], check=True)
+        subprocess.run([ffmpeg_utils.FFMPEG_BIN, "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", final_path], check=True, capture_output=True)
+        os.remove(list_file)
 
     if req.burn_captions and job["files"][0]["has_audio"]:
         transcript = whisper_utils.transcribe(job["raw_paths"][0])
